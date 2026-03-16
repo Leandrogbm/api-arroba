@@ -6,7 +6,7 @@ const cron = require("node-cron")
 
 const app = express()
 const PORT = Number(process.env.PORT) || 3000
-const CEPEA_URL = "https://cepea.org.br/br/indicador/boi-gordo.aspx"
+const PRICE_URL = "https://www.noticiasagricolas.com.br/cotacoes/boi-gordo"
 
 const priceCache = {
   value: null,
@@ -30,16 +30,18 @@ function normalizeText(text) {
 function parsePriceFromText(text) {
   const normalized = normalizeText(text)
   const patterns = [
-    /Boi Gordo - Media a Prazo Estado de Sao Paulo.*?R\$\s*(\d{1,3}(?:\.\d{3})*,\d{2})/i,
-    /Indicador do boi gordo CEPEA\/ESALQ.*?R\$\s*(\d{1,3}(?:\.\d{3})*,\d{2})/i,
-    /Estado de Sao Paulo.*?(\d{1,3}(?:\.\d{3})*,\d{2})/i
+    /Boi Gordo - Media SP a prazo.*?(\d{2}\/\d{2}\/\d{4})\s+(\d{1,3}(?:\.\d{3})*,\d{2})\s+[+-]?\d+,\d{2}/i,
+    /Boi Gordo - Media SP a prazo.*?Atualizado em:\s*(\d{2}\/\d{2}\/\d{4}).*?(\d{1,3}(?:\.\d{3})*,\d{2})/i
   ]
 
   for (const pattern of patterns) {
     const match = normalized.match(pattern)
 
     if (match) {
-      return Number(match[1].replace(/\./g, "").replace(",", "."))
+      return {
+        date: match[1],
+        price: Number(match[2].replace(/\./g, "").replace(",", "."))
+      }
     }
   }
 
@@ -49,19 +51,20 @@ function parsePriceFromText(text) {
 function parsePriceFromHtml(html) {
   const $ = cheerio.load(html)
 
-  const rows = $("tr").toArray()
+  const headings = $("h1, h2, h3, h4, strong").toArray()
 
-  for (const row of rows) {
-    const rowText = normalizeText($(row).text())
+  for (const heading of headings) {
+    const title = normalizeText($(heading).text())
 
-    if (
-      rowText.includes("Boi Gordo - Media a Prazo Estado de Sao Paulo") ||
-      rowText.includes("Indicador do boi gordo CEPEA/ESALQ")
-    ) {
-      const priceMatch = rowText.match(/(\d{1,3}(?:\.\d{3})*,\d{2})/)
+    if (title.includes("Boi Gordo - Media SP a prazo")) {
+      const block = normalizeText($(heading).parent().text())
+      const match = block.match(/(\d{2}\/\d{2}\/\d{4}).*?(\d{1,3}(?:\.\d{3})*,\d{2})\s+[+-]?\d+,\d{2}/)
 
-      if (priceMatch) {
-        return Number(priceMatch[1].replace(/\./g, "").replace(",", "."))
+      if (match) {
+        return {
+          date: match[1],
+          price: Number(match[2].replace(/\./g, "").replace(",", "."))
+        }
       }
     }
   }
@@ -70,29 +73,28 @@ function parsePriceFromHtml(html) {
 }
 
 async function fetchArrobaPrice() {
-  const response = await axios.get(CEPEA_URL, {
+  const response = await axios.get(PRICE_URL, {
     timeout: 20000,
     headers: {
       "User-Agent":
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
       Accept:
         "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-      "Accept-Language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7",
-      Referer: "https://cepea.org.br/"
+      "Accept-Language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7"
     }
   })
 
-  const price = parsePriceFromHtml(response.data)
+  const result = parsePriceFromHtml(response.data)
 
-  if (price === null || Number.isNaN(price)) {
-    throw new Error("Nao foi possivel extrair o preco da arroba no site do CEPEA")
+  if (!result || Number.isNaN(result.price)) {
+    throw new Error("Nao foi possivel extrair o preco da arroba na fonte externa")
   }
 
   return {
-    price,
+    price: result.price,
     unit: "R$/@",
-    source: "CEPEA",
-    updated_at: getTodayKey()
+    source: "Cepea/Esalq via Noticias Agricolas",
+    updated_at: result.date
   }
 }
 
