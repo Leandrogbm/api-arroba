@@ -133,7 +133,11 @@ function startServer() {
   app.get("/arroba", async (req, res) => {
     try {
       const data = await updateDailyPrice()
-      res.json(data)
+      res.json({
+        price: data.price,
+        unit: data.unit,
+        source: data.source
+      })
     } catch (error) {
       res.status(503).json({
         error: "Unable to fetch arroba price",
@@ -169,6 +173,7 @@ function startServer() {
 
   app.listen(PORT, () => {
     console.log("API Arroba iniciada")
+    console.log(`API rodando na porta ${PORT}`)
     console.log(`http://localhost:${PORT}/arroba`)
   })
 }
