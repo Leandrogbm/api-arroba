@@ -28,8 +28,7 @@ function normalizeText(text) {
 }
 
 function parsePriceFromText(text) {
-
-  const normalized = normalizeText (text)
+  const normalized = normalizeText(text)
   const patterns = [
     /Boi Gordo - Media SP a prazo.*?(\d{2}\/\d{2}\/\d{4})\s+(\d{1,3}(?:\.\d{3})*,\d{2})\s+[+-]?\d+,\d{2}/i,
     /Boi Gordo - Media SP a prazo.*?Atualizado em:\s*(\d{2}\/\d{2}\/\d{4}).*?(\d{1,3}(?:\.\d{3})*,\d{2})/i
